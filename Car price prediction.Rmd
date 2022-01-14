@@ -1,0 +1,407 @@
+---
+title: "R Data Analysis Project"
+---
+
+Data from Kaggle, 'Vehicle dataset: Used Cars data from websites'
+
+Column description
+name: car name
+year: manufactured year
+selling_price: the price when the car was sold (currency: INR, Indian Rupee)
+km_driven: mileage but in km unit
+fuel: type of fuel the car consumes
+seller_type: how the seller sold the car, individual? or dealer?
+transmission: the car's transmission type
+owner: how many owners were there?
+
+```{r}
+library(readxl)
+library(tidyr)
+library(ggplot2)
+library(lattice)
+library(caret)
+library(fastDummies)
+library(car)
+library(dplyr)
+library(tidyverse)
+```
+
+--------------------IMPORT DATA-------------------------------------------------
+
+```{r}
+Used_raw = read.csv('Car details v3.CSV')
+```
+
+```{r}
+Used_raw[1:5,]
+```
+
+
+--------------------DATA CLEANING-----------------------------------------------
+
+```{r}
+summary(Used_raw)
+```
+
+```{r}
+Used_raw <- drop_na(Used_raw)
+```
+
+```{r}
+Used_raw <- Used_raw %>% mutate(mil_km = parse_number(mileage),
+                    eng_cc = parse_number(engine),
+                    max_pow = parse_number(max_power)
+                    )
+Used_raw <- drop_na(Used_raw)
+```
+```{r}
+Used_raw <- Used_raw[, -c(1,9,10,11,12)]
+```
+
+```{r}
+table(Used_raw$km_driven)
+```
+```{r}
+table(Used_raw$mil_km)
+```
+SHOULD REMOVE POSSIBLE OUTLIERS
+km_driven: = 1 too low
+km_driven: > 1,000,000 too high
+mileage in km: = 0 doesn't make sense
+mileage in km: = 42 looks too high comare to other numbers
+
+```{r}
+Used_raw <- filter(Used_raw, !km_driven == 1,
+       !km_driven > 1000000,
+       !mil_km == 0,
+       !mil_km == 42)
+```
+
+--------------------VISUALIZATION-----------------------------------------------
+```{r}
+ggplot(Used_raw, aes(selling_price)) +
+  geom_histogram(binwidth = 500000, colour = 'black', fill = 'white') +
+  labs(title = 'selling price') +
+  xlab('selling price(INR)')
+```
+```{r}
+ggplot(Used_raw, aes(log(selling_price))) +
+  geom_histogram(binwidth = 0.5, colour = 'black', fill = 'white') +
+  labs(title = 'log_selling price') +
+  xlab('log of selling price')
+```
+
+```{r}
+ggplot(Used_raw, aes(fuel, log(selling_price), fill=fuel)) +
+  geom_boxplot() +
+  labs(title = "fuel vs selling price",) +
+  ylab('log of selling price')
+```
+```{r}
+ggplot(Used_raw, aes(year)) +
+  geom_histogram(binwidth = 1, colour = 'black', fill = 'white') +
+  labs(title = 'histogram of year') +
+  scale_x_continuous(breaks = 1990:2020) +
+  theme(axis.text.x = element_text(angle = 90))
+```
+```{r}
+ggplot(Used_raw, aes(year,log(selling_price))) +
+  geom_point() +
+  labs(title = 'year vs selling price') +
+  ylab('log of selling price')
+```
+
+```{r}
+ggplot(Used_raw, aes(km_driven, log(selling_price))) +
+  geom_point(alpha=0.2) +
+  labs(title = 'km_driven vs selling price') +
+  ylab('log of selling price')
+```
+
+```{r}
+ggplot(Used_raw, aes(seller_type, log(selling_price), fill = seller_type)) +
+  geom_boxplot() +
+  labs(title = 'seller type vs selling price') +
+  ylab('log of selling price')
+```
+```{r}
+ggplot(Used_raw, aes(transmission, log(selling_price), fill = transmission)) +
+  geom_boxplot() +
+  labs(title = 'transmission vs selling price') +
+  ylab('log of selling price')
+```
+
+```{r}
+ggplot(Used_raw, aes(owner, log(selling_price))) +
+  geom_bar(aes(fill = seller_type), stat="identity", position = 'dodge') +
+  theme(axis.text.x = element_text(angle = 30)) +
+  labs(title = 'owner vs selling price')
+```
+
+```{r}
+ggplot(Used_raw, aes(mil_km, log(selling_price))) +
+  geom_point() +
+  labs(title = 'mileage vs selling price') +
+  ylab('log of selling price')
+```
+```{r}
+ggplot(Used_raw, aes(eng_cc, log(selling_price))) +
+  geom_point() +
+  labs(title = 'engine cc vs selling price') +
+  ylab('log of selling price')
+```
+```{r}
+ggplot(Used_raw, aes(max_pow, log(selling_price))) +
+  geom_point() +
+  labs(title = 'max power vs selling price') +
+  ylab('log of selling price')
+```
+
+--------------------Processing and Modeling-------------------------------------
+
+```{r}
+Used_numeric <- dummy_cols(Used_raw, select_columns = c('fuel', 'seller_type', 'transmission', 'owner'),
+                           remove_selected_columns = TRUE,
+                           remove_first_dummy = TRUE)
+```
+
+```{r}
+corr_diesel <- data.frame(cor(Used_numeric))['fuel_Diesel']
+corr_diesel$feature <- rownames(corr_diesel)
+```
+```{r}
+ggplot(corr_diesel, aes(feature, fuel_Diesel, fill=feature)) + 
+  geom_bar(stat = 'identity') +
+  labs(title = 'correlation of fuel_Diesel') +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+```{r}
+lm_selling_price <- lm(log(selling_price) ~ . , data = Used_numeric)
+```
+```{r}
+summary(lm_selling_price)
+```
+```{r}
+plot(lm_selling_price)
+```
+
+```{r}
+data.frame(vif(lm_selling_price))
+```
+
+
+
+```{r}
+Used_test <- dummy_cols(Used_raw, select_columns = c('fuel', 'seller_type', 'transmission', 'owner'),
+                           remove_selected_columns = TRUE)
+Used_test <- Used_test[,-c(9, 12, 15, 17)]
+```
+
+```{r}
+cor(Used_test)
+```
+
+```{r}
+lm_selling_price_t <- lm(log(selling_price) ~ . , data = Used_test)
+```
+```{r}
+summary(lm_selling_price_t)
+```
+```{r}
+data.frame(vif(lm_selling_price_t))
+```
+
+
+```{r}
+Used_noeng <- Used_test[,-c(6)]
+```
+```{r}
+lm_selling_price_t2 <- lm(log(selling_price) ~ . , data = Used_noeng)
+```
+```{r}
+summary(lm_selling_price_t2)
+```
+```{r}
+data.frame(vif(lm_selling_price_t2))
+```
+```{r}
+Used_final2 <- Used_noeng[,-c(5,8)]
+```
+```{r}
+lm_selling_price_t3 <- lm(log(selling_price) ~ . , data = Used_final2)
+```
+```{r}
+summary(lm_selling_price_t3)
+```
+```{r}
+nAIC <- data.frame(AIC(lm_selling_price,
+    lm_selling_price_t,
+    lm_selling_price_t2,
+    lm_selling_price_t3))['AIC']
+nBIC <- data.frame(BIC(lm_selling_price,
+    lm_selling_price_t,
+    lm_selling_price_t2,
+    lm_selling_price_t3))['BIC']
+```
+```{r}
+nAIC$name <- rownames(nAIC)
+nBIC$name <- rownames(nBIC)
+```
+
+```{r}
+ggplot(nAIC, aes(name, AIC, fill=name)) + 
+  geom_bar(stat = 'identity') +
+  labs(title = 'AIC comparison') +
+  theme(axis.text.x = element_text(angle = 90))
+ggplot(nBIC, aes(name, BIC, fill=name)) + 
+  geom_bar(stat = 'identity') +
+  labs(title = 'BIC comparison') +
+  theme(axis.text.x = element_text(angle = 90))
+```
+
+
+
+
+```{r}
+Used_nofuel <- Used_numeric[,-c(6,8,9,10)] #also no eng_cc
+```
+
+
+```{r}
+lm_selling_price2 <- lm(log(selling_price) ~ . , data = Used_nofuel)
+```
+```{r}
+summary(lm_selling_price2)
+```
+
+```{r}
+plot(lm_selling_price2)
+```
+
+```{r}
+data.frame(vif(lm_selling_price2))
+```
+```{r}
+Used_final <- Used_nofuel[,-c(3,8)]
+```
+```{r}
+lm_selling_price3 <- lm(log(selling_price) ~ . , data = Used_final)
+```
+```{r}
+summary(lm_selling_price3)
+```
+```{r}
+AIC(lm_selling_price,
+    lm_selling_price2,
+    lm_selling_price3)
+BIC(lm_selling_price,
+    lm_selling_price2,
+    lm_selling_price3)
+```
+
+--------------------TRAIN TEST SPLIT FOR MACHINE LEARNING-----------------------
+
+```{r}
+set.seed(71)
+trainIndex_f <- createDataPartition(Used_final2[,'selling_price'], p=.75,
+                                  list = FALSE,
+                                  times = 1)
+train_idx_f <- Used_final2[trainIndex_f,]
+test_idx_f <- Used_final2[-trainIndex_f,]
+```
+
+```{r}
+train_model_f <- lm(log(selling_price) ~ ., data = train_idx_f)
+```
+
+```{r}
+summary(train_model_f)
+```
+
+```{r}
+x_test_f <- test_idx_f[,-2]
+test_idx_f$predict <- predict(train_model_f, x_test_f)
+sqrt(sum(log(test_idx_f$selling_price)-test_idx_f$predict)^2/nrow(test_idx_f))
+plot(log(test_idx_f$selling_price)-test_idx_f$predict)
+```
+
+```{r}
+test_idx_f$diff <- log(test_idx_f$selling_price)-test_idx_f$predict
+ggplot(test_idx_f, aes(diff)) +
+  geom_histogram(binwidth = 0.2, colour = 'black', fill = 'white') +
+  labs(title = 'predict vs test') +
+  xlab('difference')
+```
+```{r}
+pred_r_squared(train_model_f)
+```
+
+
+
+
+
+```{r}
+set.seed(71)
+trainIndex <- createDataPartition(Used_final[,'selling_price'], p=.75,
+                                  list = FALSE,
+                                  times = 1)
+train_idx <- Used_final[trainIndex,]
+test_idx <- Used_final[-trainIndex,]
+```
+
+
+```{r}
+train_model <- lm(log(selling_price) ~ ., data = train_idx)
+```
+
+```{r}
+summary(train_model)
+```
+
+
+```{r}
+x_test <- test_idx[,-2]
+test_idx$predict <- predict(train_model, x_test)
+sqrt(sum(log(test_idx$selling_price)-test_idx$predict)^2/nrow(test_idx))
+plot(log(test_idx$selling_price)-test_idx$predict)
+```
+
+```{r}
+test_idx$diff <- log(test_idx$selling_price)-test_idx$predict
+ggplot(test_idx, aes(diff)) +
+  geom_histogram(binwidth = 0.2, colour = 'black', fill = 'white') +
+  labs(title = 'predict vs test') +
+  xlab('difference')
+```
+
+```{r}
+PRESS <- function(linear.model) {
+  #' calculate the predictive residuals
+  pr <- residuals(linear.model)/(1-lm.influence(linear.model)$hat)
+  #' calculate the PRESS
+  PRESS <- sum(pr^2)
+  
+  return(PRESS)
+}
+
+pred_r_squared <- function(linear.model) {
+  #' Use anova() to get the sum of squares for the linear model
+  lm.anova <- anova(linear.model)
+  #' Calculate the total sum of squares
+  tss <- sum(lm.anova$'Sum Sq')
+  # Calculate the predictive R^2
+  pred.r.squared <- 1-PRESS(linear.model)/(tss)
+  
+  return(pred.r.squared)
+}
+
+```
+
+```{r}
+pred_r_squared(train_model)
+```
+
+
