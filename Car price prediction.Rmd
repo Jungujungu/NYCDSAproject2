@@ -77,6 +77,14 @@ Used_raw <- filter(Used_raw, !km_driven == 1,
        !mil_km == 42)
 ```
 
+```{r}
+write.csv(Used_raw, 'df_for_shiny.csv', row.names = FALSE)
+```
+
+```{r}
+colnames(Used_raw[,-c(2)])
+```
+
 --------------------VISUALIZATION-----------------------------------------------
 ```{r}
 ggplot(Used_raw, aes(selling_price)) +
@@ -157,10 +165,23 @@ ggplot(Used_raw, aes(max_pow, log(selling_price))) +
   ylab('log of selling price')
 ```
 
+
+--------------------TRAIN TEST SPLIT--------------------------------------------
+
+```{r}
+set.seed(71)
+trainIndex_f <- createDataPartition(Used_raw[,'selling_price'], p=.70,
+                                  list = FALSE,
+                                  times = 1)
+train_idx_f <- Used_raw[trainIndex_f,]
+test_idx_f <- Used_raw[-trainIndex_f,]
+```
+
+
 --------------------Processing and Modeling-------------------------------------
 
 ```{r}
-Used_numeric <- dummy_cols(Used_raw, select_columns = c('fuel', 'seller_type', 'transmission', 'owner'),
+Used_numeric <- dummy_cols(train_idx_f, select_columns = c('fuel', 'seller_type', 'transmission', 'owner'),
                            remove_selected_columns = TRUE,
                            remove_first_dummy = TRUE)
 ```
@@ -179,203 +200,99 @@ ggplot(corr_diesel, aes(feature, fuel_Diesel, fill=feature)) +
 
 
 ```{r}
-lm_selling_price <- lm(log(selling_price) ~ . , data = Used_numeric)
+train_lm <- lm(log(selling_price) ~ . , data = Used_numeric)
+summary(train_lm)
 ```
 ```{r}
-summary(lm_selling_price)
+data.frame(vif(train_lm))
 ```
+
+--------------------ADJUST DUMMIFY COLUMN---------------------------------------
 ```{r}
-plot(lm_selling_price)
+Used_num2 <- dummy_cols(train_idx_f, select_columns = c('fuel', 'seller_type', 'transmission', 'owner'),
+                           remove_selected_columns = TRUE)
+Used_num2 <- Used_num2[,-c(9, 12, 15, 17)]
 ```
 
 ```{r}
-data.frame(vif(lm_selling_price))
+train_lm2 <- lm(log(selling_price) ~ . , data = Used_num2)
+summary(train_lm2)
+```
+
+```{r}
+data.frame(vif(train_lm2))
+```
+
+```{r}
+Used_final <- Used_num2[,-c(6, 9, 12)]
+```
+
+```{r}
+train_lm3 <- lm(log(selling_price) ~ . , data = Used_final)
+summary(train_lm3)
+```
+
+```{r}
+data.frame(vif(train_lm3))
+```
+
+```{r}
+Used_final2 <- Used_final[,-c(5)]
+```
+
+```{r}
+train_lm4 <- lm(log(selling_price) ~ . , data = Used_final2)
+summary(train_lm4)
+```
+
+```{r}
+data.frame(vif(train_lm4))
 ```
 
 
 
 ```{r}
-Used_test <- dummy_cols(Used_raw, select_columns = c('fuel', 'seller_type', 'transmission', 'owner'),
+AIC(train_lm,
+    train_lm2,
+    train_lm3,
+    train_lm4)
+BIC(train_lm,
+    train_lm2,
+    train_lm3,
+    train_lm4)
+```
+
+
+
+--------------------USE THE MODEL 'train_lm4' TO TEST---------------------------
+```{r}
+Used_test <- dummy_cols(test_idx_f, select_columns = c('fuel', 'seller_type', 'transmission', 'owner'),
                            remove_selected_columns = TRUE)
 Used_test <- Used_test[,-c(9, 12, 15, 17)]
 ```
-
 ```{r}
-cor(Used_test)
-```
-
-```{r}
-lm_selling_price_t <- lm(log(selling_price) ~ . , data = Used_test)
-```
-```{r}
-summary(lm_selling_price_t)
-```
-```{r}
-data.frame(vif(lm_selling_price_t))
-```
-
-
-```{r}
-Used_noeng <- Used_test[,-c(6)]
-```
-```{r}
-lm_selling_price_t2 <- lm(log(selling_price) ~ . , data = Used_noeng)
-```
-```{r}
-summary(lm_selling_price_t2)
-```
-```{r}
-data.frame(vif(lm_selling_price_t2))
-```
-```{r}
-Used_final2 <- Used_noeng[,-c(5,8)]
-```
-```{r}
-lm_selling_price_t3 <- lm(log(selling_price) ~ . , data = Used_final2)
-```
-```{r}
-summary(lm_selling_price_t3)
-```
-```{r}
-nAIC <- data.frame(AIC(lm_selling_price,
-    lm_selling_price_t,
-    lm_selling_price_t2,
-    lm_selling_price_t3))['AIC']
-nBIC <- data.frame(BIC(lm_selling_price,
-    lm_selling_price_t,
-    lm_selling_price_t2,
-    lm_selling_price_t3))['BIC']
-```
-```{r}
-nAIC$name <- rownames(nAIC)
-nBIC$name <- rownames(nBIC)
-```
-
-```{r}
-ggplot(nAIC, aes(name, AIC, fill=name)) + 
-  geom_bar(stat = 'identity') +
-  labs(title = 'AIC comparison') +
-  theme(axis.text.x = element_text(angle = 90))
-ggplot(nBIC, aes(name, BIC, fill=name)) + 
-  geom_bar(stat = 'identity') +
-  labs(title = 'BIC comparison') +
-  theme(axis.text.x = element_text(angle = 90))
+Used_test <- Used_test[,-c(6, 9, 12)]
+Used_test <- Used_test[,-c(5)]
 ```
 
 
 
 
 ```{r}
-Used_nofuel <- Used_numeric[,-c(6,8,9,10)] #also no eng_cc
-```
-
-
-```{r}
-lm_selling_price2 <- lm(log(selling_price) ~ . , data = Used_nofuel)
-```
-```{r}
-summary(lm_selling_price2)
+x_test_f <- Used_test[,-2]
+Used_test$predict <- predict(train_lm4, x_test_f)
+sqrt(sum(log(Used_test$selling_price)-Used_test$predict)^2/nrow(Used_test)) #standard error
+plot(log(Used_test$selling_price)-Used_test$predict)
 ```
 
 ```{r}
-plot(lm_selling_price2)
-```
-
-```{r}
-data.frame(vif(lm_selling_price2))
-```
-```{r}
-Used_final <- Used_nofuel[,-c(3,8)]
-```
-```{r}
-lm_selling_price3 <- lm(log(selling_price) ~ . , data = Used_final)
-```
-```{r}
-summary(lm_selling_price3)
-```
-```{r}
-AIC(lm_selling_price,
-    lm_selling_price2,
-    lm_selling_price3)
-BIC(lm_selling_price,
-    lm_selling_price2,
-    lm_selling_price3)
-```
-
---------------------TRAIN TEST SPLIT FOR MACHINE LEARNING-----------------------
-
-```{r}
-set.seed(71)
-trainIndex_f <- createDataPartition(Used_final2[,'selling_price'], p=.75,
-                                  list = FALSE,
-                                  times = 1)
-train_idx_f <- Used_final2[trainIndex_f,]
-test_idx_f <- Used_final2[-trainIndex_f,]
-```
-
-```{r}
-train_model_f <- lm(log(selling_price) ~ ., data = train_idx_f)
-```
-
-```{r}
-summary(train_model_f)
-```
-
-```{r}
-x_test_f <- test_idx_f[,-2]
-test_idx_f$predict <- predict(train_model_f, x_test_f)
-sqrt(sum(log(test_idx_f$selling_price)-test_idx_f$predict)^2/nrow(test_idx_f))
-plot(log(test_idx_f$selling_price)-test_idx_f$predict)
-```
-
-```{r}
-test_idx_f$diff <- log(test_idx_f$selling_price)-test_idx_f$predict
-ggplot(test_idx_f, aes(diff)) +
+Used_test$diff <- log(Used_test$selling_price)-Used_test$predict
+ggplot(Used_test, aes(diff)) +
   geom_histogram(binwidth = 0.2, colour = 'black', fill = 'white') +
   labs(title = 'predict vs test') +
   xlab('difference')
 ```
-```{r}
-pred_r_squared(train_model_f)
-```
 
-
-
-
-
-```{r}
-set.seed(71)
-trainIndex <- createDataPartition(Used_final[,'selling_price'], p=.75,
-                                  list = FALSE,
-                                  times = 1)
-train_idx <- Used_final[trainIndex,]
-test_idx <- Used_final[-trainIndex,]
-```
-
-
-```{r}
-train_model <- lm(log(selling_price) ~ ., data = train_idx)
-```
-
-```{r}
-summary(train_model)
-```
-
-
-```{r}
-x_test <- test_idx[,-2]
-test_idx$predict <- predict(train_model, x_test)
-sqrt(sum(log(test_idx$selling_price)-test_idx$predict)^2/nrow(test_idx))
-plot(log(test_idx$selling_price)-test_idx$predict)
-```
-
-```{r}
-test_idx$diff <- log(test_idx$selling_price)-test_idx$predict
-ggplot(test_idx, aes(diff)) +
-  geom_histogram(binwidth = 0.2, colour = 'black', fill = 'white') +
-  labs(title = 'predict vs test') +
-  xlab('difference')
-```
 
 ```{r}
 PRESS <- function(linear.model) {
@@ -401,7 +318,7 @@ pred_r_squared <- function(linear.model) {
 ```
 
 ```{r}
-pred_r_squared(train_model)
+pred_r_squared(train_lm4)
 ```
 
 
